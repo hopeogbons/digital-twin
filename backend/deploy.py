@@ -9,7 +9,7 @@ def main():
 
     # Clean up
     if os.path.exists("lambda-package"):
-        shutil.rmtree("lambda-package")
+        shutil.rmtree("lambda-package", ignore_errors=True)
     if os.path.exists("lambda-deployment.zip"):
         os.remove("lambda-deployment.zip")
 
