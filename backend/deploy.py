@@ -70,7 +70,7 @@ def main():
         print("✓ Size OK for direct Lambda upload")
 
     # Cleanup temp folder
-    shutil.rmtree("lambda-package")
+    shutil.rmtree("lambda-package", ignore_errors=True)
     print("✓ Cleaned up temporary files")
 
 
