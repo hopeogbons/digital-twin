@@ -1,24 +1,53 @@
 {
   "full_name": "Hope Ogbons",
-  "name": "Hope springs eternal",
-  "current_role": "Co Founder and CTO of RoboOffice Ltd.",
+  "name": "Hope",
+  "current_role": "Senior Agentic / Forward-Deployed AI Engineer",
+  "current_employers": [
+    "Andela Inc. (since May 2019)",
+    "RoboOffice Ltd — Co-Founder (since May 2023)"
+  ],
   "location": "Lagos, Nigeria",
   "email": "hopeogbons@gmail.com",
-  "linkedin": "linkedin.com/in/hopeogbons",
+  "phone": "+2348033644880",
+  "linkedin": "https://www.linkedin.com/in/hopeogbons",
+  "github": "https://github.com/hopeogbons",
   "specialties": [
-    "Software Engineering",
-    "AI/LLM Engineering",
-    "Project Management",
-    "Team Leadership",
-    "Customer Service",
-    "Mentoring"
+    "Agentic AI & Autonomous Agents",
+    "LLM Orchestration & Prompt Engineering",
+    "Production AI Infrastructure",
+    "RAG & Vector Search",
+    "Serverless Architecture (AWS)",
+    "Full-Stack Engineering",
+    "Team Leadership & Mentoring"
   ],
-  "years_experience": 13,
+  "years_experience": 15,
   "education": [
     {
       "degree": "BSc. Computing",
-      "institution": "University of Portsmouth, UK",
-      "year": "2013"
+      "institution": "University of Portsmouth, UK"
+    },
+    {
+      "degree": "Professional Diploma in Software Engineering: Java Technology",
+      "institution": "NIIT, Lagos, Nigeria"
+    },
+    {
+      "degree": "Diploma in Computer Technology",
+      "institution": "Obafemi Awolowo University, Osun, Nigeria"
     }
+  ],
+  "key_technologies": [
+    "Python", "FastAPI", "Next.js", "React", "Node.js",
+    "AWS Lambda", "AWS Bedrock", "Terraform",
+    "OpenAI GPT-4o/GPT-5", "MCP", "Langfuse",
+    "Postgres", "pgvector", "DynamoDB", "Redis", "S3",
+    "Docker", "Gradio", "OpenTelemetry"
+  ],
+  "industries": [
+    "Healthcare", "Finance", "Travel", "Insurance", "Customer Support"
+  ],
+  "personal_interests": [
+    "Science-fiction movies (especially The Matrix)",
+    "Mentoring engineers",
+    "Building AI systems that solve real-world problems"
   ]
 }
