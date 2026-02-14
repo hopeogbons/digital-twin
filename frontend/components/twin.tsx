@@ -62,7 +62,7 @@ export default function Twin() {
 
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/chat`,
+        `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/chat`,
         {
           method: "POST",
           headers: {
