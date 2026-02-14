@@ -1,10 +1,33 @@
+---
+title: AI Digital Twin
+emoji: 🤖
+colorFrom: slate
+colorTo: gray
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # AI Digital Twin
 
 A context-adaptive persona engine that creates a high-fidelity AI representation of a professional. Visitors interact with the digital twin through a chat interface, getting accurate responses grounded in real career data, communication style, and professional history.
 
-**Live:** [https://d5zo5ki02wqtq.cloudfront.net](https://d5zo5ki02wqtq.cloudfront.net)
+**Live (HF Spaces):** Deployed as a Docker Space on Hugging Face
+**Live (AWS):** [https://d5zo5ki02wqtq.cloudfront.net](https://d5zo5ki02wqtq.cloudfront.net)
 
 ## Architecture
+
+### Hugging Face Spaces (Docker)
+
+```
+Browser → HF Spaces (Docker Container)
+              ├── FastAPI (serves static + API)
+              ├── Next.js static export (frontend)
+              ├── HF Inference API (Llama 3.1 8B)
+              └── /data volume (conversation memory)
+```
+
+### AWS (Lambda)
 
 ```
 Browser → CloudFront (CDN) → S3 (Static Frontend)
@@ -23,10 +46,10 @@ Browser → CloudFront (CDN) → S3 (Static Frontend)
 | Layer | Technology |
 |---|---|
 | Frontend | Next.js 16, React 19, Tailwind CSS, react-markdown |
-| Backend | Python 3.12, FastAPI, Mangum (Lambda adapter) |
-| AI | AWS Bedrock (Amazon Nova Lite), dynamic prompt engineering |
-| Infrastructure | Terraform, AWS Lambda, API Gateway v2, CloudFront, S3, Route53, ACM |
-| CI/CD | GitHub Actions with OIDC authentication |
+| Backend | Python 3.12, FastAPI |
+| AI | HF Inference API (Llama 3.1 8B) / AWS Bedrock (Nova Lite) |
+| Infrastructure | Docker (HF Spaces) / Terraform + AWS Lambda + CloudFront |
+| CI/CD | Git push to HF Space / GitHub Actions with OIDC |
 
 ## Key Features
 
@@ -124,25 +147,38 @@ The frontend runs on `http://localhost:3000` and connects to the backend automat
 
 ### Environment Variables
 
-No `.env` file is required for local development. Defaults handle everything:
+No `.env` file is required for local development (with HF token). Defaults handle everything:
 
 | Variable | Default | Description |
 |---|---|---|
-| `USE_S3` | `false` | Use local file storage instead of S3 |
-| `CORS_ORIGINS` | `http://localhost:3000` | Allowed frontend origin |
-| `BEDROCK_MODEL_ID` | `amazon.nova-lite-v1:0` | AWS Bedrock model |
-| `DEFAULT_AWS_REGION` | `us-east-1` | AWS region |
+| `HF_TOKEN` | (required) | Hugging Face API token |
+| `HF_MODEL_ID` | `meta-llama/Llama-3.1-8B-Instruct` | HF model to use |
+| `CORS_ORIGINS` | `*` | Allowed origins |
+| `MEMORY_DIR` | `/data/memory` | Conversation storage path |
 
 To override, create `backend/.env`:
 
 ```
-DEFAULT_AWS_REGION=us-east-2
-BEDROCK_MODEL_ID=amazon.nova-micro-v1:0
+HF_TOKEN=hf_xxx
+HF_MODEL_ID=meta-llama/Llama-3.1-8B-Instruct
+MEMORY_DIR=../memory
 ```
 
 ## Deployment
 
-### Direct Deploy (from local machine)
+### Hugging Face Spaces (Docker)
+
+```bash
+# Build and run locally
+docker build -t digital-twin .
+docker run -p 7860:7860 -e HF_TOKEN=hf_xxx digital-twin
+
+# Open http://localhost:7860
+```
+
+Push to a HF Space repo to deploy. Set `HF_TOKEN` as a Space secret.
+
+### Direct Deploy to AWS (from local machine)
 
 ```bash
 DEFAULT_AWS_REGION=us-east-2 ./scripts/deploy.sh dev
@@ -179,10 +215,10 @@ DEFAULT_AWS_REGION=us-east-2 ./scripts/destroy.sh dev
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/` | Service info (model, storage type) |
-| `GET` | `/health` | Health check |
-| `POST` | `/chat` | Send a message, get AI response |
-| `GET` | `/conversation/{session_id}` | Retrieve conversation history |
+| `GET` | `/api/info` | Service info (model, storage type) |
+| `GET` | `/api/health` | Health check |
+| `POST` | `/api/chat` | Send a message, get AI response |
+| `GET` | `/api/conversation/{session_id}` | Retrieve conversation history |
 
 ### Chat Request
 
