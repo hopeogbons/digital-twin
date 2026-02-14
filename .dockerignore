@@ -1,0 +1,14 @@
+.git
+.github
+terraform
+scripts
+memory
+node_modules
+frontend/.next
+frontend/out
+__pycache__
+*.pyc
+.env
+.venv
+lambda-deployment.zip
+*.md
