@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
@@ -7,9 +8,9 @@ from typing import Optional, List, Dict
 import json
 import uuid
 from datetime import datetime
-import boto3
-from botocore.exceptions import ClientError
-from context import prompt
+from openai import OpenAI
+from context import build_system_prompt
+from rag import rag_service
 
 # Load environment variables
 load_dotenv()
@@ -17,7 +18,7 @@ load_dotenv()
 app = FastAPI()
 
 # Configure CORS
-origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+origins = os.getenv("CORS_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -26,28 +27,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize Bedrock client
-bedrock_client = boto3.client(
-    service_name="bedrock-runtime", 
-    region_name=os.getenv("DEFAULT_AWS_REGION", "us-east-1")
+# Initialize HF Inference client (OpenAI-compatible)
+HF_TOKEN = os.getenv("HF_TOKEN", "")
+hf_client = OpenAI(
+    base_url="https://router.huggingface.co/v1",
+    api_key=HF_TOKEN,
 )
 
-# Bedrock model selection
-# Available models:
-# - amazon.nova-micro-v1:0  (fastest, cheapest)
-# - amazon.nova-lite-v1:0   (balanced - default)
-# - amazon.nova-pro-v1:0    (most capable, higher cost)
-# Remember the Heads up: you might need to add us. or eu. prefix to the below model id
-BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0")
+# Model selection
+HF_MODEL_ID = os.getenv("HF_MODEL_ID", "meta-llama/Llama-3.1-8B-Instruct")
 
-# Memory storage configuration
-USE_S3 = os.getenv("USE_S3", "false").lower() == "true"
-S3_BUCKET = os.getenv("S3_BUCKET", "")
-MEMORY_DIR = os.getenv("MEMORY_DIR", "../memory")
-
-# Initialize S3 client if needed
-if USE_S3:
-    s3_client = boto3.client("s3")
+# Memory storage configuration (local only — no S3 for HF Spaces)
+MEMORY_DIR = os.getenv("MEMORY_DIR", "/data/memory")
 
 
 # Request/Response models
@@ -67,121 +58,86 @@ class Message(BaseModel):
     timestamp: str
 
 
+@app.on_event("startup")
+async def startup_event():
+    """Initialize RAG service on startup."""
+    rag_service.initialize()
+
+
 # Memory management functions
 def get_memory_path(session_id: str) -> str:
     return f"{session_id}.json"
 
 
 def load_conversation(session_id: str) -> List[Dict]:
-    """Load conversation history from storage"""
-    if USE_S3:
-        try:
-            response = s3_client.get_object(Bucket=S3_BUCKET, Key=get_memory_path(session_id))
-            return json.loads(response["Body"].read().decode("utf-8"))
-        except ClientError as e:
-            if e.response["Error"]["Code"] == "NoSuchKey":
-                return []
-            raise
-    else:
-        # Local file storage
-        file_path = os.path.join(MEMORY_DIR, get_memory_path(session_id))
-        if os.path.exists(file_path):
-            with open(file_path, "r") as f:
-                return json.load(f)
-        return []
+    """Load conversation history from local storage"""
+    file_path = os.path.join(MEMORY_DIR, get_memory_path(session_id))
+    if os.path.exists(file_path):
+        with open(file_path, "r") as f:
+            return json.load(f)
+    return []
 
 
 def save_conversation(session_id: str, messages: List[Dict]):
-    """Save conversation history to storage"""
-    if USE_S3:
-        s3_client.put_object(
-            Bucket=S3_BUCKET,
-            Key=get_memory_path(session_id),
-            Body=json.dumps(messages, indent=2),
-            ContentType="application/json",
-        )
-    else:
-        # Local file storage
-        os.makedirs(MEMORY_DIR, exist_ok=True)
-        file_path = os.path.join(MEMORY_DIR, get_memory_path(session_id))
-        with open(file_path, "w") as f:
-            json.dump(messages, f, indent=2)
+    """Save conversation history to local storage"""
+    os.makedirs(MEMORY_DIR, exist_ok=True)
+    file_path = os.path.join(MEMORY_DIR, get_memory_path(session_id))
+    with open(file_path, "w") as f:
+        json.dump(messages, f, indent=2)
 
 
-def call_bedrock(conversation: List[Dict], user_message: str) -> str:
-    """Call AWS Bedrock with conversation history"""
-    
-    # Build messages in Bedrock format
-    messages = []
-    
-    # Add system prompt as first user message (Bedrock convention)
-    messages.append({
-        "role": "user", 
-        "content": [{"text": f"System: {prompt()}"}]
-    })
-    
-    # Add conversation history (limit to last 10 exchanges to manage context)
-    for msg in conversation[-20:]:  # Last 10 back-and-forth exchanges
-        messages.append({
-            "role": msg["role"],
-            "content": [{"text": msg["content"]}]
-        })
-    
+def call_llm(conversation: List[Dict], user_message: str) -> str:
+    """Call HF Inference API via OpenAI-compatible client"""
+
+    # Retrieve relevant context for this query
+    rag_context = rag_service.retrieve(user_message)
+    system_prompt = build_system_prompt(rag_context)
+
+    # Build messages with dynamic system prompt
+    messages = [{"role": "system", "content": system_prompt}]
+
+    # Add conversation history (limit to last 10 messages for token safety)
+    for msg in conversation[-10:]:
+        messages.append({"role": msg["role"], "content": msg["content"]})
+
     # Add current user message
-    messages.append({
-        "role": "user",
-        "content": [{"text": user_message}]
-    })
-    
+    messages.append({"role": "user", "content": user_message})
+
     try:
-        # Call Bedrock using the converse API
-        response = bedrock_client.converse(
-            modelId=BEDROCK_MODEL_ID,
+        response = hf_client.chat.completions.create(
+            model=HF_MODEL_ID,
             messages=messages,
-            inferenceConfig={
-                "maxTokens": 2000,
-                "temperature": 0.7,
-                "topP": 0.9
-            }
+            max_tokens=2000,
+            temperature=0.7,
+            top_p=0.9,
         )
-        
-        # Extract the response text
-        return response["output"]["message"]["content"][0]["text"]
-        
-    except ClientError as e:
-        error_code = e.response['Error']['Code']
-        if error_code == 'ValidationException':
-            # Handle message format issues
-            print(f"Bedrock validation error: {e}")
-            raise HTTPException(status_code=400, detail="Invalid message format for Bedrock")
-        elif error_code == 'AccessDeniedException':
-            print(f"Bedrock access denied: {e}")
-            raise HTTPException(status_code=403, detail="Access denied to Bedrock model")
-        else:
-            print(f"Bedrock error: {e}")
-            raise HTTPException(status_code=500, detail=f"Bedrock error: {str(e)}")
+
+        return response.choices[0].message.content
+
+    except Exception as e:
+        print(f"LLM error: {e}")
+        raise HTTPException(status_code=500, detail=f"LLM error: {str(e)}")
 
 
-@app.get("/")
-async def root():
+@app.get("/api/info")
+async def info():
     return {
-        "message": "AI Digital Twin API (Powered by AWS Bedrock)",
+        "message": "AI Digital Twin API (Powered by HF Inference)",
         "memory_enabled": True,
-        "storage": "S3" if USE_S3 else "local",
-        "ai_model": BEDROCK_MODEL_ID
+        "storage": "local",
+        "ai_model": HF_MODEL_ID,
     }
 
 
-@app.get("/health")
+@app.get("/api/health")
 async def health_check():
     return {
-        "status": "healthy", 
-        "use_s3": USE_S3,
-        "bedrock_model": BEDROCK_MODEL_ID
+        "status": "healthy",
+        "ai_model": HF_MODEL_ID,
     }
 
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     try:
         # Generate session ID if not provided
@@ -190,8 +146,8 @@ async def chat(request: ChatRequest):
         # Load conversation history
         conversation = load_conversation(session_id)
 
-        # Call Bedrock for response
-        assistant_response = call_bedrock(conversation, request.message)
+        # Call LLM for response
+        assistant_response = call_llm(conversation, request.message)
 
         # Update conversation history
         conversation.append(
@@ -217,7 +173,7 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/conversation/{session_id}")
+@app.get("/api/conversation/{session_id}")
 async def get_conversation(session_id: str):
     """Retrieve conversation history"""
     try:
@@ -227,7 +183,12 @@ async def get_conversation(session_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Serve Next.js static export — must be last so API routes take priority
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.isdir(static_dir):
+    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=7860)
