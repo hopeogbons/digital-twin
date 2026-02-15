@@ -26,7 +26,13 @@ RUN mkdir -p /data/memory /data/chroma_db
 
 # HF Spaces requires UID 1000
 RUN useradd -m -u 1000 user
-RUN chown -R user:user /app /data
+
+# Pre-download ChromaDB's ONNX embedding model during build
+# so it doesn't need to download ~79MB at runtime (causes HF Spaces startup timeout)
+RUN python -c "from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2; ONNXMiniLM_L6_V2()(['warmup'])"
+RUN mkdir -p /home/user/.cache && cp -r /root/.cache/chroma /home/user/.cache/chroma
+
+RUN chown -R user:user /app /data /home/user/.cache
 USER user
 
 EXPOSE 7860

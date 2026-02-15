@@ -1,7 +1,7 @@
 ---
 title: AI Digital Twin
 emoji: 🤖
-colorFrom: slate
+colorFrom: gray
 colorTo: gray
 sdk: docker
 app_port: 7860
