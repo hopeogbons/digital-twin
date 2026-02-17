@@ -2,11 +2,11 @@ import Twin from "@/components/twin";
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 flex flex-col">
-      <div className="container mx-auto px-4 py-8 flex flex-col flex-1">
-        <div className="max-w-4xl mx-auto w-full flex flex-col flex-1">
+    <main className="h-screen bg-gradient-to-br from-slate-50 to-gray-100 flex flex-col overflow-hidden">
+      <div className="container mx-auto px-4 pt-8 flex flex-col flex-1 min-h-0">
+        <div className="max-w-4xl mx-auto w-full flex flex-col flex-1 min-h-0">
           {/* Profile Hero */}
-          <div className="flex flex-col items-center mb-6">
+          <div className="flex flex-col items-center mb-6 shrink-0">
             <img
               src="/hopeogbons.png"
               alt="Hope Ogbons"
@@ -21,15 +21,15 @@ export default function Home() {
           </div>
 
           {/* Chat */}
-          <div className="flex-1 min-h-[500px] max-h-[calc(100vh-380px)]">
+          <div className="flex-1 min-h-0">
             <Twin />
           </div>
-
-          <footer className="mt-6 text-center text-sm text-gray-500">
-            <p>AI Digital Twin @hopeogbons</p>
-          </footer>
         </div>
       </div>
+
+      <footer className="shrink-0 py-4 text-center text-sm text-gray-500">
+        <p>AI Digital Twin @hopeogbons</p>
+      </footer>
     </main>
   );
 }
